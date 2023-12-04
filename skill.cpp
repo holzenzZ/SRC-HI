@@ -3349,6 +3349,13 @@ int64 skill_attack (int attack_type, struct block_list* src, struct block_list *
 		return 0;
 #endif
 
+	switch (skill_id) {
+	case MO_EXTREMITYFIST:
+		if (!check_distance_bl(src, bl, AREA_SIZE))
+			return 0;
+		break;
+	}
+
 	dmg = battle_calc_attack(attack_type,src,bl,skill_id,skill_lv,flag&0xFFF);
 
 	//If the damage source is a unit, the damage is not delayed
@@ -7119,6 +7126,26 @@ int skill_castend_nodamage_id (struct block_list *src, struct block_list *bl, ui
 	case SJ_BOOKOFDIMENSION:
 		clif_skill_nodamage(src,bl,skill_id,skill_lv,
 			sc_start(src,bl,type,100,skill_lv,skill_get_time(skill_id,skill_lv)));
+			
+		if (sd) {
+			if (skill_id == LK_CONCENTRATION) {
+				e_skill skills[] = { KN_TWOHANDQUICKEN, LK_PARRYING, SM_ENDURE };
+				for (int s = 0; s < 3; ++s) {
+					uint16 lv = pc_checkskill(sd, skills[s]);
+					if (lv == 0)
+						continue;
+					unit_skilluse_id(src, src->id, skills[s], lv);
+				}
+			} else if (skill_id == WS_OVERTHRUSTMAX) {
+				e_skill skills[] = { BS_ADRENALINE, BS_WEAPONPERFECT, BS_MAXIMIZE, MC_LOUD };
+				for (int s = 0; s < 4; ++s) {
+					uint16 lv = pc_checkskill(sd, skills[s]);
+					if (lv == 0)
+						continue;
+					unit_skilluse_id(src, src->id, skills[s], lv);
+				}
+			}
+		}
 		break;
 
 	case SJ_GRAVITYCONTROL: {
@@ -8455,7 +8482,8 @@ int skill_castend_nodamage_id (struct block_list *src, struct block_list *bl, ui
 			if (dstsd)
 				pc_bonus_script_clear(dstsd,BSF_REM_ON_DISPELL);
 			
-			sd->skill_dispell_block_timer = gettick() + 5000;
+			if (sd)
+				sd->skill_dispell_block_timer = gettick() + 4000;
 
 			if(!tsc || !tsc->count)
 				break;
@@ -13544,34 +13572,34 @@ struct skill_unit_group *skill_unitsetting(struct block_list *src, uint16 skill_
 		if (sd)
 			val1 += pc_checkskill(sd, DC_DANCINGLESSON);
 		break;
-	case BA_POEMBRAGI:
-		val1 = 3 * skill_lv + status->dex / 10; // Casting time reduction
-		//For some reason at level 10 the base delay reduction is 50%.
-		val2 = (skill_lv < 10 ? 3 * skill_lv : 50) + status->int_ / 5; // After-cast delay reduction
-		if (sd) {
-			val1 += pc_checkskill(sd, BA_MUSICALLESSON);
-			val2 += 2 * pc_checkskill(sd, BA_MUSICALLESSON);
-		}
-		break;
+case BA_POEMBRAGI:
+        val1 = 3 * 10 + status->dex / 10; // Casting time reduction
+        //For some reason at level 10 the base delay reduction is 50%.
+        val2 = 50 + status->int_ / 5; // After-cast delay reduction
+        if (sd) {
+            val1 += pc_checkskill(sd, BA_MUSICALLESSON);
+            val2 += 2 * pc_checkskill(sd, BA_MUSICALLESSON);
+        }
+        break;
 	case DC_DONTFORGETME:
 	{
 #ifdef RENEWAL
-		val1 = 3 * skill_lv + status->dex / 15; // ASPD decrease
-		val2 = 2 * skill_lv + status->agi / 20; // Movement speed adjustment.
+		val1 = 3 * 10 + status->dex / 15; // ASPD decrease
+		val2 = 2 * 10 + status->agi / 20; // Movement speed adjustment.
 #else
 		bool val1_adjust = false;
 		if (!map_flag_gvg(src->m) && !map_flag_vs(src->m)) {
-			val1 = 5 + 3 * skill_lv + status->dex / 10; // ASPD decrease
+			val1 = 5 + 3 * 10 + status->dex / 10; // ASPD decrease
 		} else {
-			if (status->dex >= 200)
-				val1 = 16;
+			if (status->dex >= 205)
+				val1 = 23;
+			else if (status->dex >= 200)
+				val1 = 21;
+			else if (status->dex >= 195)
+				val1 = 18;
 			else if (status->dex >= 190)
-				val1 = 13;
-			else if (status->dex >= 180)
-				val1 = 11;
+				val1 = 15;
 			else if (status->dex >= 170)
-				val1 = 8;
-			else if (status->dex >= 160)
 				val1 = 7;
 			else if (status->dex >= 150)
 				val1 = 5;
@@ -13582,7 +13610,7 @@ struct skill_unit_group *skill_unitsetting(struct block_list *src, uint16 skill_
 
 			val1_adjust = true;
 		}
-		val2 = 5 + 3 * skill_lv + status->agi / 10; // Movement speed adjustment.
+		val2 = 5 + 3 * 10 + status->agi / 10; // Movement speed adjustment.
 #endif		
 		if (sd) {
 			if (!val1_adjust)
@@ -16659,6 +16687,12 @@ bool skill_check_condition_castend(struct map_session_data* sd, uint16 skill_id,
 
 	// perform skill-specific checks (and actions)
 	switch( skill_id ) {
+		case MO_EXTREMITYFIST:
+			if (sd->spiritball < 1) {
+				clif_skill_fail(sd, skill_id, USESKILL_FAIL_LEVEL, 0);
+				return false;
+			}
+			break;
 		case PR_BENEDICTIO:
 			skill_check_pc_partner(sd, skill_id, &skill_lv, 1, 1);
 			break;
